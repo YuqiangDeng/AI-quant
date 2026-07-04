@@ -1,0 +1,100 @@
+];
+
+// Process data
+const dates = allData.map(d => d[0].slice(0,4)+'-'+d[0].slice(4,6)+'-'+d[0].slice(6,8));
+const opens = allData.map(d => d[1]);
+const highs = allData.map(d => d[2]);
+const lows = allData.map(d => d[3]);
+const closes = allData.map(d => d[4]);
+const vols = allData.map(d => d[5]);
+
+// Moving averages
+function ma(arr, n) {
+  const r = [];
+  for(let i=0;i<arr.length;i++) r.push(i>=n-1 ? arr.slice(i-n+1,i+1).reduce((a,b)=>a+b,0)/n : null);
+  return r;
+}
+const ma5 = ma(closes,5), ma20 = ma(closes,20), ma60 = ma(closes,60);
+
+// ===== 1. Price Curve Chart =====
+const priceChart = echarts.init(document.getElementById('priceChart'));
+priceChart.setOption({
+  tooltip: {
+    trigger: 'axis', axisPointer: { type: 'cross' },
+    formatter: function(ps) {
+      let s = '<b>'+ps[0].name+'</b>';
+      ps.forEach(function(p) { if(p.value!==null && p.value!==undefined) s += '<br/>'+p.marker+' '+p.seriesName+': ¥'+p.value.toFixed(2); });
+      return s;
+    }
+  },
+  legend: { data: ['收盘价','MA5','MA20','MA60'], bottom: 0, icon: 'roundRect', itemWidth: 18, itemHeight: 3 },
+  grid: { left: '5%', right: '4%', top: '6%', bottom: '14%' },
+  xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30, fontSize: 10 }, axisLine: { lineStyle: { color: '#ddd' } } },
+  yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#f0f0f0' } },
+    axisLabel: { formatter: function(v) { return '¥'+v.toFixed(0); } }
+  },
+  series: [
+    { name: '收盘价', type: 'line', data: closes, smooth: true,
+      lineStyle: { width: 2, color: '#1a1a1a' }, symbol: 'none',
+      areaStyle: { color: 'rgba(26,26,26,0.05)' }
+    },
+    { name: 'MA5', type: 'line', data: ma5, smooth: true,
+      lineStyle: { width: 1.5, color: '#e74c3c' }, symbol: 'none' },
+    { name: 'MA20', type: 'line', data: ma20, smooth: true,
+      lineStyle: { width: 1.5, color: '#3498db' }, symbol: 'none' },
+    { name: 'MA60', type: 'line', data: ma60, smooth: true,
+      lineStyle: { width: 1.5, color: '#e67e22' }, symbol: 'none' }
+  ],
+  dataZoom: [
+    { type: 'inside', start: 0, end: 100 },
+    { type: 'slider', start: 0, end: 100, height: 12, bottom: 22, borderColor: '#ddd' }
+  ]
+});
+
+// ===== 2. K-line Chart =====
+const klineChart = echarts.init(document.getElementById('klineChart'));
+const kData = opens.map(function(o,i) { return [o, closes[i], lows[i], highs[i]]; });
+klineChart.setOption({
+  tooltip: {
+    trigger: 'axis', axisPointer: { type: 'cross' },
+    formatter: function(ps) {
+      var p = ps[0]; if(!p) return '';
+      var idx = p.dataIndex;
+      var d = allData[idx];
+      return '<b>'+dates[idx]+'</b><br/>开: ¥'+d[1].toFixed(2)+'<br/>收: ¥'+d[4].toFixed(2)+'<br/>高: ¥'+d[2].toFixed(2)+'<br/>低: ¥'+d[3].toFixed(2);
+    }
+  },
+  grid: { left: '5%', right: '4%', top: '6%', bottom: '8%' },
+  xAxis: { type: 'category', data: dates, axisLabel: { rotate: 30, fontSize: 10 }, axisLine: { lineStyle: { color: '#ddd' } } },
+  yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#f0f0f0' } },
+    axisLabel: { formatter: function(v) { return '¥'+v.toFixed(0); } }
+  },
+  series: [{
+    type: 'candlestick', data: kData,
+    itemStyle: { color: '#e74c3c', color0: '#27ae60', borderColor: '#e74c3c', borderColor0: '#27ae60' }
+  }],
+  dataZoom: [
+    { type: 'inside', start: 50, end: 100 },
+    { type: 'slider', start: 50, end: 100, height: 12 }
+  ]
+});
+
+// ===== 3. Volume Chart =====
+const volChart = echarts.init(document.getElementById('volChart'));
+const volColors = closes.map(function(c,i) { return c >= opens[i] ? '#e74c3c' : '#27ae60'; });
+volChart.setOption({
+  grid: { left: '5%', right: '4%', top: '6%', bottom: '6%' },
+  xAxis: { type: 'category', data: dates, axisLabel: { show: false } },
+  yAxis: { type: 'value', scale: true, splitLine: { show: false },
+    axisLabel: { formatter: function(v) { return (v/10000).toFixed(0)+'万'; } }
+  },
+  series: [{
+    type: 'bar',
+    data: vols.map(function(v,i) { return { value: v, itemStyle: { color: volColors[i] } }; }),
+    barWidth: '50%'
+  }],
+  dataZoom: [{ type: 'inside', start: 50, end: 100 }]
+});
+
+// RSI Tag
+var rsiVal = 

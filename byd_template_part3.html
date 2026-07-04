@@ -1,0 +1,11 @@
+;
+var rsiTag = document.getElementById('rsiTag');
+if(rsiVal >= 70) rsiTag.innerHTML = '<span class="tag tag-up">超买</span>';
+else if(rsiVal <= 30) rsiTag.innerHTML = '<span class="tag tag-down">超卖</span>';
+else if(rsiVal >= 50) rsiTag.innerHTML = '<span class="tag tag-neutral">偏强</span>';
+else rsiTag.innerHTML = '<span class="tag tag-neutral">偏弱</span>';
+
+window.addEventListener('resize', function() { priceChart.resize(); klineChart.resize(); volChart.resize(); });
+</script>
+</body>
+</html>

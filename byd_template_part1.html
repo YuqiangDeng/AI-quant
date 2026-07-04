@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>比亚迪 (002594.SZ) 综合分析面板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f5f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px;color:#1a1a1a}
+.header{background:#fff;border-radius:14px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.header h1{font-size:22px;font-weight:600;display:flex;align-items:center;gap:8px}
+.header .sub{font-size:13px;color:#888;margin-top:4px;display:flex;gap:16px;flex-wrap:wrap}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:14px 0}
+.kpi-card{background:#fafafa;border-radius:10px;padding:12px;border:1px solid #eee}
+.kpi-card .label{font-size:11px;color:#999}
+.kpi-card .value{font-size:17px;font-weight:600;margin-top:2px}
+.kpi-card .value.up{color:#e74c3c}
+.kpi-card .value.down{color:#27ae60}
+.chart-section{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04)}
+.chart-section h2{font-size:15px;font-weight:500;margin-bottom:12px;color:#444;padding-bottom:8px;border-bottom:2px solid #f0f0f0}
+.chart-container{width:100%;height:420px}
+.chart-half{width:100%;height:180px}
+.analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.analysis-box{padding:16px;border-radius:10px;border:1px solid #eee;background:#fafafa}
+.analysis-box h3{font-size:14px;font-weight:500;margin-bottom:10px;color:#333}
+.analysis-box table{width:100%;font-size:13px;border-collapse:collapse}
+.analysis-box td{padding:5px 8px;border-bottom:1px solid #f0f0f0}
+.analysis-box td:last-child{text-align:right;font-weight:500}
+.analysis-box tr:last-child td{border:none}
+.tag{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:500;margin:2px}
+.tag-up{background:#fcebeb;color:#e74c3c}
+.tag-down{background:#eaf3de;color:#27ae60}
+.tag-neutral{background:#f1efe8;color:#888}
+.alert-box{background:#fef9e7;border:1px solid #f9e79f;border-radius:8px;padding:12px;font-size:13px;color:#7d6608;margin-top:10px;line-height:1.6}
+.alert-box.info{background:#e6f1fb;border-color:#85b7eb;color:#0c447c}
+@media(max-width:700px){.analysis-grid{grid-template-columns:1fr}}
+.footer{text-align:center;font-size:12px;color:#bbb;margin-top:16px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🚗 比亚迪 (002594.SZ) 综合分析</h1>
+  <div class="sub">
+    <span>深交所主板 · 汽车制造 / 新能源</span>
+    <span>数据区间: 2025-07-04 ~ 2026-07-03</span>
+    <span>数据: Tushare Pro</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">最新收盘</div><div class="value KPI_DIR_CLASS">¥KPI_LAST_CLOSE</div></div>
+    <div class="kpi-card"><div class="label">今日涨跌幅</div><div class="value KPI_DIR_CLASS">KPI_PCT</div></div>
+    <div class="kpi-card"><div class="label">区间最高</div><div class="value">¥KPI_HIGH</div></div>
+    <div class="kpi-card"><div class="label">区间最低</div><div class="value">¥KPI_LOW</div></div>
+    <div class="kpi-card"><div class="label">区间涨幅</div><div class="value KPI_RANGE_CLASS">KPI_RANGE_PCT</div></div>
+    <div class="kpi-card"><div class="label" style="color:#e74c3c">MA5</div><div class="value">¥KPI_MA5</div></div>
+    <div class="kpi-card"><div class="label" style="color:#3498db">MA20</div><div class="value">¥KPI_MA20</div></div>
+    <div class="kpi-card"><div class="label">RSI(14)</div><div class="value">KPI_RSI</div></div>
+  </div>
+</div>
+
+<!-- Section 1: Price Curve -->
+<div class="chart-section">
+  <h2>📈 每日收盘价曲线 · 含 MA5 / MA20 / MA60</h2>
+  <div class="chart-container" id="priceChart"></div>
+</div>
+
+<!-- Section 2: K-line + Volume -->
+<div class="chart-section">
+  <h2>📊 K 线图 · 红涨绿跌</h2>
+  <div class="chart-container" id="klineChart"></div>
+</div>
+<div class="chart-section">
+  <h2>📊 成交量柱状图</h2>
+  <div class="chart-half" id="volChart"></div>
+</div>
+
+<!-- Section 3: Analysis -->
+<div class="chart-section">
+  <h2>🔍 技术面 + 基本面分析</h2>
+  <div class="analysis-grid">
+    <div class="analysis-box">
+      <h3>📐 技术面分析 (Technical Analysis)</h3>
+      <table>
+        <tr><td>RSI (14日)</td><td>KPI_RSI <span id="rsiTag"></span></td></tr>
+        <tr><td>收盘价 vs MA5</td><td>CLOSE_VS_MA5</td></tr>
+        <tr><td>收盘价 vs MA20</td><td>CLOSE_VS_MA20</td></tr>
+        <tr><td>MA5 vs MA20</td><td>MA_STATUS_ICON MA_STATUS_TEXT</td></tr>
+        <tr><td>上涨 / 下跌天数</td><td>KPI_UP_DAYS 涨 / KPI_TOTAL_DAYS 日 (KPI_UP_PCT%)</td></tr>
+        <tr><td>最大单日涨幅</td><td style="color:#e74c3c">+KPI_MAX_UP%</td></tr>
+        <tr><td>最大单日跌幅</td><td style="color:#27ae60">KPI_MAX_DOWN%</td></tr>
+      </table>
+    </div>
+    <div class="analysis-box">
+      <h3>🏢 基本面概览 (Fundamental Overview)</h3>
+      <table>
+        <tr><td>公司全称</td><td>比亚迪股份有限公司</td></tr>
+        <tr><td>上市板块</td><td>深交所主板 (002594.SZ)</td></tr>
+        <tr><td>所属行业</td><td>汽车制造 / 新能源汽车</td></tr>
+        <tr><td>核心业务</td><td>新能源汽车、动力电池、半导体、电子</td></tr>
+        <tr><td>上市日期</td><td>2011-06-30</td></tr>
+      </table>
+      <div class="alert-box info">
+        💡 要获取完整财务指标（PE、PB、ROE、营收增长率等），可调用 tushare 的 <code>fina_indicator</code> 和 <code>income</code> 接口。
+      </div>
+      <div class="alert-box">
+        ⚡ 比亚迪是全球新能源汽车销量冠军，2024年销量超 300 万辆。作为新能源龙头，其股价受行业政策、销量数据和原材料价格等多重因素影响，波动较大。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">GitHub: YuqiangDeng/AI-quant | 数据: Tushare Pro</div>
+
+<script>
+const allData = [

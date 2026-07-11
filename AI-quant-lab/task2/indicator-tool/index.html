@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术指标实验室</title>
+<script src="../../assets/vendor/chart.umd.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f5f5f5; color: #222; font-size: 13px; line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* ── Header ── */
+.header {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  background: #EEEDFE; border-bottom: 0.5px solid #ddd;
+  position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 15px; font-weight: 500; color: #3C3489; margin-right: 16px; white-space: nowrap; }
+.header select {
+  padding: 4px 8px; border: 0.5px solid #CECBF6; border-radius: 6px;
+  background: white; font-size: 12px; height: 28px; outline: none; cursor: pointer;
+}
+.header .label { font-size: 11px; color: #888; white-space: nowrap; }
+
+/* ── Main layout ── */
+.main { display: flex; gap: 0; padding: 8px; max-width: 1480px; margin: 0 auto; }
+
+/* ── Left panel ── */
+.left-panel {
+  width: 280px; min-width: 280px; display: flex; flex-direction: column; gap: 12px;
+}
+.left-panel .section-title {
+  font-size: 11px; font-weight: 500; color: #888; padding: 4px 0 0 4px;
+}
+
+/* ── Parameter card ── */
+.param-card {
+  background: white; border: 0.5px solid #ddd; border-radius: 8px; overflow: hidden;
+}
+.param-card .card-header {
+  display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 13px; font-weight: 500;
+}
+.param-card .card-header .dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.param-card .card-desc { padding: 0 10px 4px; font-size: 11px; color: #888; line-height: 1.4; }
+.param-card .param-row {
+  display: flex; align-items: center; gap: 6px; padding: 4px 10px 6px;
+}
+.param-card .param-row .plabel { font-size: 11px; color: #999; width: 38px; flex-shrink: 0; }
+.param-card .param-row .pslider { flex: 1; height: 4px; cursor: pointer; accent-color: #7F77DD; }
+.param-card .param-row .pinput {
+  width: 52px; padding: 2px 4px; border: 0.5px solid #ddd; border-radius: 4px;
+  font-size: 12px; text-align: center; outline: none;
+}
+.param-card .param-row .pinput:focus { border-color: #7F77DD; }
+
+/* ── Right area ── */
+.right-area { flex: 1; margin-left: 12px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Chart row ── */
+.chart-row {
+  display: flex; gap: 0; background: white; border: 0.5px solid #ddd; border-radius: 8px; overflow: hidden;
+}
+.chart-row .chart-panel { flex: 1; padding: 8px 10px 4px; min-height: 0; display: flex; flex-direction: column; }
+.chart-row .chart-panel .chart-title {
+  font-size: 11px; font-weight: 500; color: #555; margin-bottom: 2px; flex-shrink: 0;
+}
+.chart-row .chart-panel .chart-value {
+  font-size: 11px; color: #888; float: right;
+}
+.chart-row .chart-panel .chart-wrap {
+  flex: 1; position: relative; min-height: 0;
+}
+.chart-row .chart-panel .chart-wrap canvas {
+  position: absolute; left: 0; top: 0; width: 100% !important; height: 100% !important;
+}
+.chart-row.height-rsi   .chart-wrap { min-height: 90px; }
+.chart-row.height-macd  .chart-wrap { min-height: 120px; }
+.chart-row.height-atr   .chart-wrap { min-height: 90px; }
+.chart-row.height-bb    .chart-wrap { min-height: 100px; }
+.chart-row.height-obv   .chart-wrap { min-height: 90px; }
+
+/* ── Price chart (full width, standalone row) ── */
+.price-row { background: white; border: 0.5px solid #ddd; border-radius: 8px; padding: 10px 14px 4px; display: flex; flex-direction: column; }
+.price-row .chart-title { font-size: 12px; font-weight: 500; color: #222; margin-bottom: 4px; flex-shrink: 0; }
+.price-row .chart-wrap { flex: 1; position: relative; min-height: 180px; }
+.price-row .chart-wrap canvas { position: absolute; left: 0; top: 0; width: 100% !important; height: 100% !important; }
+
+/* ── Status bar ── */
+.status-bar {
+  padding: 4px 16px; font-size: 10px; color: #aaa; border-top: 0.5px solid #eee;
+  display: flex; justify-content: space-between; align-items: center; margin-top: 4px;
+}
+.status-bar .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+  .main { flex-direction: column; }
+  .left-panel { width: 100%; min-width: unset; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .left-panel .param-card { flex: 1; min-width: 200px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ─── Header ─── -->
+<div class="header">
+  <h1>技术指标实验室</h1>
+  <span class="label">股票</span>
+  <select id="selStock">
+    <option value="smic_hk">中芯国际 (00981.HK)</option>
+    <option value="smic_a">中芯国际 (688981.SH)</option>
+    <option value="byd_a">比亚迪 (002594.SZ)</option>
+    <option value="yangtze_a">长江电力 (600900.SH)</option>
+  </select>
+  <span class="label">数据</span>
+  <select id="selPeriod">
+    <option value="all">全部</option>
+    <option value="180">近6月</option>
+    <option value="90">近3月</option>
+    <option value="30">近1月</option>
+  </select>
+</div>
+
+<!-- ─── Main ─── -->
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="section-title">参数调节（调后自动重绘）</div>
+
+    <!-- RSI -->
+    <div class="param-card">
+      <div class="card-header"><span class="dot" style="background:#7F77DD"></span>RSI</div>
+      <div class="card-desc">衡量涨跌幅力度，&gt;70超买 &lt;30超卖</div>
+      <div class="param-row">
+        <span class="plabel">period</span>
+        <input type="range" class="pslider" id="rsiPeriod" min="2" max="50" value="14" style="accent-color:#7F77DD">
+        <input type="number" class="pinput" id="rsiPeriodVal" min="2" max="50" value="14" style="border-color:#7F77DD">
+      </div>
+    </div>
+
+    <!-- MACD -->
+    <div class="param-card">
+      <div class="card-header"><span class="dot" style="background:#378ADD"></span>MACD</div>
+      <div class="card-desc">双均线差值识别趋势转折</div>
+      <div class="param-row"><span class="plabel">fast</span>
+        <input type="range" class="pslider" id="macdFast" min="2" max="60" value="12" style="accent-color:#378ADD">
+        <input type="number" class="pinput" id="macdFastVal" min="2" max="60" value="12" style="border-color:#378ADD">
+      </div>
+      <div class="param-row"><span class="plabel">slow</span>
+        <input type="range" class="pslider" id="macdSlow" min="5" max="100" value="26" style="accent-color:#378ADD">
+        <input type="number" class="pinput" id="macdSlowVal" min="5" max="100" value="26" style="border-color:#378ADD">
+      </div>
+      <div class="param-row"><span class="plabel">signal</span>
+        <input type="range" class="pslider" id="macdSig" min="2" max="30" value="9" style="accent-color:#D85A30">
+        <input type="number" class="pinput" id="macdSigVal" min="2" max="30" value="9" style="border-color:#D85A30">
+      </div>
+    </div>
+
+    <!-- ATR -->
+    <div class="param-card">
+      <div class="card-header"><span class="dot" style="background:#639922"></span>ATR</div>
+      <div class="card-desc">真实波动幅度，用于设定止损</div>
+      <div class="param-row">
+        <span class="plabel">period</span>
+        <input type="range" class="pslider" id="atrPeriod" min="2" max="50" value="14" style="accent-color:#639922">
+        <input type="number" class="pinput" id="atrPeriodVal" min="2" max="50" value="14" style="border-color:#639922">
+      </div>
+    </div>
+
+    <!-- BB -->
+    <div class="param-card">
+      <div class="card-header"><span class="dot" style="background:#BA7517"></span>Bollinger Bands</div>
+      <div class="card-desc">统计学通道，带宽收缩预示变盘</div>
+      <div class="param-row"><span class="plabel">period</span>
+        <input type="range" class="pslider" id="bbPeriod" min="2" max="60" value="20" style="accent-color:#BA7517">
+        <input type="number" class="pinput" id="bbPeriodVal" min="2" max="60" value="20" style="border-color:#BA7517">
+      </div>
+      <div class="param-row"><span class="plabel">&sigma;</span>
+        <input type="range" class="pslider" id="bbStd" min="10" max="40" value="20" style="accent-color:#BA7517">
+        <input type="number" class="pinput" id="bbStdVal" min="1" max="4" value="2.0" step="0.5" style="border-color:#BA7517">
+      </div>
+    </div>
+
+    <!-- OBV -->
+    <div class="param-card">
+      <div class="card-header"><span class="dot" style="background:#D4537E"></span>OBV</div>
+      <div class="card-desc">量先于价，验证趋势真伪及背离</div>
+      <div class="param-row">
+        <span class="plabel">signal</span>
+        <input type="range" class="pslider" id="obvSignal" min="0" max="30" value="0" style="accent-color:#D4537E">
+        <input type="number" class="pinput" id="obvSignalVal" min="0" max="30" value="0" style="border-color:#D4537E">
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT AREA -->
+  <div class="right-area">
+
+    <!-- Price chart -->
+    <div class="price-row">
+      <div class="chart-title">价格 <span id="priceTitle" style="font-weight:400;color:#888;font-size:11px"></span></div>
+      <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+    </div>
+
+    <!-- RSI row -->
+    <div class="chart-row height-rsi">
+      <div class="chart-panel">
+        <div class="chart-title">RSI <span id="rsiVal" class="chart-value"></span></div>
+        <div class="chart-wrap"><canvas id="rsiChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- MACD row -->
+    <div class="chart-row height-macd">
+      <div class="chart-panel">
+        <div class="chart-title">MACD <span id="macdVal" class="chart-value"></span></div>
+        <div class="chart-wrap"><canvas id="macdChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ATR row -->
+    <div class="chart-row height-atr">
+      <div class="chart-panel">
+        <div class="chart-title">ATR <span id="atrVal" class="chart-value"></span></div>
+        <div class="chart-wrap"><canvas id="atrChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- BB row -->
+    <div class="chart-row height-bb">
+      <div class="chart-panel">
+        <div class="chart-title">Bollinger Bands <span id="bbVal" class="chart-value"></span></div>
+        <div class="chart-wrap"><canvas id="bbChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- OBV row -->
+    <div class="chart-row height-obv">
+      <div class="chart-panel">
+        <div class="chart-title">OBV <span id="obvVal" class="chart-value"></span></div>
+        <div class="chart-wrap"><canvas id="obvChart"></canvas></div>
+      </div>
+    </div>
+
+</div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <span id="statusLeft">加载中...</span>
+  <span><span class="dot" style="background:#639922"></span>ready</span>
+</div>
+
+<script src="data.js"></script><script>
+// ════════════════════════════════════════════════════════════════
+//  数据
+// ════════════════════════════════════════════════════════════════
+const STOCK_LABELS = {
+  smic_hk: '中芯国际 (00981.HK)',
+  smic_a: '中芯国际 (688981.SH)',
+  byd_a: '比亚迪 (002594.SZ)',
+  yangtze_a: '长江电力 (600900.SH)',
+};
+
+let rawData = [];
+let chartInstances = {};
+
+// ════════════════════════════════════════════════════════════════
+//  指标计算函数 (JavaScript, 从 Python notebook 移植)
+// ════════════════════════════════════════════════════════════════
+function ema(data, period) {
+  const r = []; r[0] = data[0];
+  const k = 2 / (period + 1);
+  for (let i = 1; i < data.length; i++) r[i] = data[i] * k + r[i - 1] * (1 - k);
+  return r;
+}
+
+function calcRSI(close, period = 14) {
+  const delta = []; const gain = []; const loss = [];
+  for (let i = 0; i < close.length; i++) {
+    if (i === 0) { delta[i] = 0; } else { delta[i] = close[i] - close[i - 1]; }
+    gain[i] = delta[i] > 0 ? delta[i] : 0;
+    loss[i] = delta[i] < 0 ? -delta[i] : 0;
+  }
+  const avgGain = []; const avgLoss = [];
+  let sGain = 0, sLoss = 0;
+  for (let i = 1; i <= period; i++) { sGain += gain[i]; sLoss += loss[i]; }
+  avgGain[period] = sGain / period; avgLoss[period] = sLoss / period;
+  for (let i = period + 1; i < close.length; i++) {
+    avgGain[i] = (avgGain[i - 1] * (period - 1) + gain[i]) / period;
+    avgLoss[i] = (avgLoss[i - 1] * (period - 1) + loss[i]) / period;
+  }
+  const rsi = [];
+  for (let i = 0; i < close.length; i++) {
+    if (i < period) { rsi[i] = null; }
+    else {
+      if (avgLoss[i] === 0) { rsi[i] = 100; }
+      else { const rs = avgGain[i] / avgLoss[i]; rsi[i] = 100 - 100 / (1 + rs); }
+    }
+  }
+  return rsi;
+}
+
+function calcMACD(close, fast = 12, slow = 26, signal = 9) {
+  const ef = ema(close, fast); const es = ema(close, slow);
+  const dif = ef.map((v, i) => v - es[i]);
+  const dea = ema(dif, signal);
+  const hist = dif.map((v, i) => 2 * (v - dea[i]));
+  return { dif, dea, hist };
+}
+
+function calcATR(high, low, close, period = 14) {
+  const tr = []; tr[0] = high[0] - low[0];
+  for (let i = 1; i < close.length; i++) {
+    tr[i] = Math.max(high[i] - low[i], Math.abs(high[i] - close[i - 1]), Math.abs(low[i] - close[i - 1]));
+  }
+  const atr = []; let sum = 0;
+  for (let i = 0; i < period; i++) sum += tr[i];
+  for (let i = 0; i < close.length; i++) {
+    if (i < period - 1) { atr[i] = null; }
+    else if (i === period - 1) { atr[i] = sum / period; }
+    else { atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period; }
+  }
+  return { tr, atr };
+}
+
+function calcBB(close, period = 20, stdDev = 2) {
+  const mid = []; const up = []; const low = []; const bw = []; const pb = [];
+  for (let i = 0; i < close.length; i++) {
+    if (i < period - 1) { mid[i]=null; up[i]=null; low[i]=null; bw[i]=null; pb[i]=null; }
+    else {
+      const s = close.slice(i - period + 1, i + 1);
+      const m = s.reduce((a,b)=>a+b,0)/period;
+      const std = Math.sqrt(s.reduce((a,b)=>a+(b-m)**2,0)/period);
+      mid[i]=m; up[i]=m+stdDev*std; low[i]=m-stdDev*std; bw[i]=up[i]-low[i];
+      pb[i] = (bw[i]===0)?0.5:(close[i]-low[i])/bw[i];
+    }
+  }
+  return { middle: mid, upper: up, lower: low, bandwidth: bw, percentB: pb };
+}
+
+function calcOBV(close, volume) {
+  const obv = [0];
+  for (let i = 1; i < close.length; i++) {
+    if (close[i] > close[i - 1]) obv[i] = obv[i - 1] + volume[i];
+    else if (close[i] < close[i - 1]) obv[i] = obv[i - 1] - volume[i];
+    else obv[i] = obv[i - 1];
+  }
+  return obv;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  工具函数
+// ════════════════════════════════════════════════════════════════
+document.getElementById('statusLeft').textContent = 'Chart.js ' + (typeof Chart !== 'undefined' ? 'loaded ✓' : 'NOT FOUND ✗');
+function getParams() {
+  return {
+    rsi:   +document.getElementById('rsiPeriod').value,
+    mFast: +document.getElementById('macdFast').value,
+    mSlow: +document.getElementById('macdSlow').value,
+    mSig:  +document.getElementById('macdSig').value,
+    atr:   +document.getElementById('atrPeriod').value,
+    bbP:   +document.getElementById('bbPeriod').value,
+    bbS:   +document.getElementById('bbStd').value / 10,
+    obvSig: +document.getElementById('obvSignal').value,
+  };
+}
+
+function getActiveData() {
+  const maxPts = document.getElementById('selPeriod').value;
+  const n = maxPts === 'all' ? rawData.length : Math.min(parseInt(maxPts), rawData.length);
+  return rawData.slice(-n);
+}
+
+function fmtNum(v, d = 2) { return v === null || v === undefined ? '—' : v.toFixed(d); }
+
+// ════════════════════════════════════════════════════════════════
+//  图表渲染
+// ════════════════════════════════════════════════════════════════
+function renderAll() {
+  const data = getActiveData();
+  if (data.length === 0) return;
+  const dates = data.map(d => d.trade_date);
+  const cls = data.map(d => d.close);
+  const hi = data.map(d => d.high);
+  const lo = data.map(d => d.low);
+  const p = getParams();
+
+  // Price
+  const lastC = cls[cls.length - 1];
+  document.getElementById('priceTitle').textContent = `— ${STOCK_LABELS[document.getElementById('selStock').value]}  最新 ${lastC?.toFixed(2) ?? ''}`;
+  renderPriceChart(dates, cls);
+
+  // RSI
+  const rsi = calcRSI(cls, p.rsi);
+  const lastRsi = rsi[rsi.length - 1];
+  document.getElementById('rsiVal').textContent = lastRsi !== null ? lastRsi.toFixed(2) : '—';
+  renderRSI(dates, rsi, p.rsi);
+
+  // MACD
+  const macd = calcMACD(cls, p.mFast, p.mSlow, p.mSig);
+  const lastDif = macd.dif[macd.dif.length - 1];
+  const lastDea = macd.dea[macd.dea.length - 1];
+  document.getElementById('macdVal').textContent = `DIF: ${fmtNum(lastDif)}  DEA: ${fmtNum(lastDea)}`;
+  renderMACD(dates, macd, p.mFast, p.mSlow, p.mSig);
+
+  // ATR
+  const atrRes = calcATR(hi, lo, cls, p.atr);
+  const lastAtr = atrRes.atr[atrRes.atr.length - 1];
+  document.getElementById('atrVal').textContent = fmtNum(lastAtr);
+  renderATR(dates, atrRes.atr, p.atr);
+
+  // BB
+  const bb = calcBB(cls, p.bbP, p.bbS);
+  const lastPb = bb.percentB[bb.percentB.length - 1];
+  document.getElementById('bbVal').textContent = `%B: ${fmtNum(lastPb)}`;
+  renderBB(dates, cls, bb, p.bbP, p.bbS);
+
+  // OBV
+  const vol = data.map(d => d.vol);
+  const obv = calcOBV(cls, vol);
+  const lastObv = obv[obv.length - 1];
+  let obvSignal = null;
+  if (p.obvSig > 0) obvSignal = sma(obv, p.obvSig);
+  document.getElementById('obvVal').textContent = lastObv.toExponential(2);
+  renderOBV(dates, obv, obvSignal);
+
+  // Status
+  document.getElementById('statusLeft').textContent =
+    `${STOCK_LABELS[document.getElementById('selStock').value]} | ${dates.length} 个交易日`;
+}
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+// ── Price Chart ──
+function renderPriceChart(labels, close) {
+  destroyChart('price');
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  try {
+    chartInstances.price = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'close', data: close, borderColor: '#185FA5', backgroundColor: 'rgba(24,95,165,0.06)',
+          borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } },
+          y: { grid: { color: 'rgba(0,0,0,0.04)' } }
+        }
+      }
+    });
+  } catch(e) { console.error('price chart error:', e); }
+}
+
+// ── RSI Chart ──
+function renderRSI(labels, rsi, period) {
+  destroyChart('rsi');
+  const ctx = document.getElementById('rsiChart').getContext('2d');
+  const flat70 = labels.map(() => 70);
+  const flat50 = labels.map(() => 50);
+  const flat30 = labels.map(() => 30);
+  try {
+    chartInstances.rsi = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'RSI', data: rsi, borderColor: '#7F77DD', borderWidth: 1.2, pointRadius: 0, tension: 0.2 },
+          { label: '70', data: flat70, borderColor: '#D85A30', borderWidth: 0.6, pointRadius: 0, borderDash: [3,3] },
+          { label: '50', data: flat50, borderColor: '#aaa', borderWidth: 0.4, pointRadius: 0, borderDash: [2,2] },
+          { label: '30', data: flat30, borderColor: '#639922', borderWidth: 0.6, pointRadius: 0, borderDash: [3,3] },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } }, y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.04)' } } }
+      }
+    });
+  } catch(e) { console.error('rsi chart error:', e); }
+}
+
+// ── MACD Chart ──
+function renderMACD(labels, macd, fast, slow, sig) {
+  destroyChart('macd');
+  const ctx = document.getElementById('macdChart').getContext('2d');
+  const dif = macd.dif; const dea = macd.dea; const hist = macd.hist;
+  const colors = hist.map(v => v >= 0 ? 'rgba(99,153,34,0.6)' : 'rgba(216,90,48,0.6)');
+  try {
+    chartInstances.macd = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { type: 'bar', label: 'hist', data: hist, backgroundColor: colors, borderColor: colors, borderWidth: 0.3, order: 2 },
+          { type: 'line', label: 'DIF', data: dif, borderColor: '#185FA5', borderWidth: 1, pointRadius: 0, tension: 0.2, order: 1 },
+          { type: 'line', label: 'DEA', data: dea, borderColor: '#D85A30', borderWidth: 0.8, pointRadius: 0, borderDash: [3,2], tension: 0.2, order: 1 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.04)' } } }
+      }
+    });
+  } catch(e) { console.error('macd chart error:', e); }
+}
+
+// ── ATR Chart ──
+function renderATR(labels, atr, period) {
+  destroyChart('atr');
+  const ctx = document.getElementById('atrChart').getContext('2d');
+  try {
+    chartInstances.atr = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'ATR', data: atr, borderColor: '#639922', backgroundColor: 'rgba(99,153,34,0.1)',
+          borderWidth: 1.2, pointRadius: 0, fill: true, tension: 0.2,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.04)' } } }
+      }
+    });
+  } catch(e) { console.error('atr chart error:', e); }
+}
+
+// ── BB Chart ──
+function renderBB(labels, close, bb, period, std) {
+  destroyChart('bb');
+  const ctx = document.getElementById('bbChart').getContext('2d');
+  try {
+    chartInstances.bb = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Upper', data: bb.upper, borderColor: '#D85A30', borderWidth: 0.7, pointRadius: 0, borderDash: [3,2], tension: 0.2 },
+          { label: 'Middle', data: bb.middle, borderColor: '#639922', borderWidth: 0.9, pointRadius: 0, tension: 0.2 },
+          { label: 'Lower', data: bb.lower, borderColor: '#D85A30', borderWidth: 0.7, pointRadius: 0, borderDash: [3,2], tension: 0.2 },
+          { label: 'close', data: close, borderColor: '#185FA5', borderWidth: 1.2, pointRadius: 0, tension: 0.2 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.04)' } } }
+      }
+    });
+  } catch(e) { console.error('bb chart error:', e); }
+}
+
+function sma(data, period) {
+  const r = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) r[i] = null;
+    else r[i] = data.slice(i - period + 1, i + 1).reduce((a,b) => a + b, 0) / period;
+  }
+  return r;
+}
+
+// ── OBV Chart ──
+function renderOBV(labels, obv, signal) {
+  destroyChart('obv');
+  const ctx = document.getElementById('obvChart').getContext('2d');
+  const datasets = [
+    { label: 'OBV', data: obv, borderColor: '#D4537E', borderWidth: 1.2, pointRadius: 0, tension: 0.2 },
+  ];
+  if (signal) {
+    datasets.push({ label: 'Signal', data: signal, borderColor: '#888780', borderWidth: 0.8, pointRadius: 0, borderDash: [3,2], tension: 0.2 });
+  }
+  try {
+    chartInstances.obv = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6, font: { size: 9 }, color: '#aaa' }, grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,0.04)' } } }
+      }
+    });
+  } catch(e) { console.error('obv chart error:', e); }
+}
+
+// ════════════════════════════════════════════════════════════════
+//  数据加载 (方案A: 从 data.js 内嵌数据直接读取)
+// ════════════════════════════════════════════════════════════════
+function loadStock(key) {
+  rawData = STOCK_DATA[key];
+  if (!rawData || rawData.length === 0) {
+    document.getElementById('statusLeft').textContent = `数据加载失败: ${key}`;
+    return;
+  }
+  // 确保按日期升序
+  if (rawData.length > 1 && rawData[0].trade_date > rawData[1].trade_date) {
+    rawData = [...rawData].sort((a, b) => a.trade_date.localeCompare(b.trade_date));
+  }
+  document.getElementById('statusLeft').textContent = `${STOCK_LABELS[key]} | ${rawData.length} 个交易日 | 内嵌数据`;
+  renderAll();
+}
+
+// ════════════════════════════════════════════════════════════════
+//  事件绑定
+// ════════════════════════════════════════════════════════════════
+function linkSliderInput(sliderId, inputId, render = true) {
+  const slider = document.getElementById(sliderId);
+  const input = document.getElementById(inputId);
+  slider.addEventListener('input', () => { input.value = slider.value; if (render) debounceRender(); });
+  input.addEventListener('change', () => {
+    let v = parseFloat(input.value);
+    const min = parseFloat(input.min), max = parseFloat(input.max);
+    if (isNaN(v)) v = parseFloat(slider.defaultValue);
+    v = Math.max(min, Math.min(max, v));
+    input.value = v;
+    slider.value = v;
+    if (render) renderAll();
+  });
+}
+
+let renderTimer = null;
+function debounceRender() {
+  if (renderTimer) clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderAll, 200);
+}
+
+// Link all params
+linkSliderInput('rsiPeriod', 'rsiPeriodVal');
+linkSliderInput('macdFast', 'macdFastVal');
+linkSliderInput('macdSlow', 'macdSlowVal');
+linkSliderInput('macdSig', 'macdSigVal');
+linkSliderInput('atrPeriod', 'atrPeriodVal');
+linkSliderInput('bbPeriod', 'bbPeriodVal');
+linkSliderInput('bbStd', 'bbStdVal');
+linkSliderInput('obvSignal', 'obvSignalVal');
+
+document.getElementById('selStock').addEventListener('change', () => {
+  loadStock(document.getElementById('selStock').value);
+});
+document.getElementById('selPeriod').addEventListener('change', renderAll);
+
+// ════════════════════════════════════════════════════════════════
+//  启动
+// ════════════════════════════════════════════════════════════════
+loadStock('smic_hk');
+</script>
+
+<script>window.__BASE="../../";</script>
+<script src="../../assets/back.js"></script>
+</body>
+</html>

@@ -77,6 +77,10 @@ function rowsOf(code){ return SYMBOL_DATA[code] ? SYMBOL_DATA[code].rows : []; }
 function filterRange(rows, start, end){
   return rows.filter(r => (!start || r[0]>=start) && (!end || r[0]<=end));
 }
+// YYYYMMDD(整数) -> "YYYY-MM-DD"（用于坐标/表格显示，便于阅读）
+function fmtDate(t){ const s=String(t); return s.length>=8 ? s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8) : s; }
+function parseDate(t){ const s=String(t); return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8)); }
+function daysBetween(a,b){ return Math.round((parseDate(b)-parseDate(a))/86400000); }
 function mean(a){ if(!a.length) return 0; let s=0; for(const v of a) s+=v; return s/a.length; }
 function std(a){ if(a.length<2) return 0; const m=mean(a); let s=0; for(const v of a) s+=(v-m)*(v-m); return Math.sqrt(s/(a.length-1)); }
 
@@ -181,8 +185,7 @@ function runBacktest(params){
   const total0=params.initCapital;
   let sims, weights;
   if(params.system==='S1'){ sims=[params.sysS1]; weights=[1]; }
-  else if(params.system==='S2'){ sims=[params.sysS2]; weights=[1]; }
-  else { sims=[params.sysS1, params.sysS2]; weights=[0.4,0.6]; }
+  else { sims=[params.sysS2]; weights=[1]; }
   const m=rows.length;
   const combined=new Array(m).fill(0);
   const sysMaxUnits=new Array(m).fill(0);  // 每日各子系统(maxUnits≤4)中的最大持仓单位数
@@ -194,7 +197,7 @@ function runBacktest(params){
     allAdds=allAdds.concat(r.adds);
     allEntries=allEntries.concat(r.entries);
   }
-  // 峰值/平均持有单位按"每子系统"口径（海龟 4 单位上限针对单个子系统，S1+S2 各自封顶）
+  // 峰值/平均持有单位（海龟 4 单位上限针对所选子系统）
   let maxUnitsHeld=0, sumUnits=0, cntUnits=0;
   for(let i=0;i<m;i++){ if(sysMaxUnits[i]>maxUnitsHeld)maxUnitsHeld=sysMaxUnits[i]; if(sysMaxUnits[i]>0){sumUnits+=sysMaxUnits[i];cntUnits++;} }
   const avgUnits = cntUnits? sumUnits/cntUnits : 0;
@@ -231,13 +234,13 @@ const FONT={family:'-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif', s
 function baseLayout(title, ytitle){
   return {title:{text:title, font:{size:14, color:'#1f2d3d'}}, font:FONT,
     paper_bgcolor:'#fff', plot_bgcolor:'#fff', margin:{l:55,r:20,t:40,b:40},
-    xaxis:{gridcolor:'#eef2f6', zeroline:false}, yaxis:{gridcolor:'#eef2f6', zeroline:false, title:ytitle||''},
+    xaxis:{type:'date', gridcolor:'#eef2f6', zeroline:false}, yaxis:{gridcolor:'#eef2f6', zeroline:false, title:ytitle||''},
     legend:{orientation:'h', y:-0.18, font:{size:11}}, hovermode:'x unified'};
 }
 function render(res){
   if(res.error){ document.getElementById('charts').innerHTML='<div class="alert">'+res.error+'</div>';
     document.getElementById('metrics').innerHTML=''; document.getElementById('tradetable').innerHTML=''; return; }
-  const rows=res.rows, dates=rows.map(r=>String(r[0]));
+  const rows=res.rows, dates=rows.map(r=>fmtDate(r[0]));
   const o=rows.map(r=>r[1]), h=rows.map(r=>r[2]), l=rows.map(r=>r[3]), c=rows.map(r=>r[4]);
   // 主图 K线 + 通道
   const tCandle={type:'candlestick', x:dates, open:o, high:h, low:l, close:c,
@@ -246,11 +249,6 @@ function render(res){
   const traces=[tCandle,
     {x:dates,y:dh1,mode:'lines',name:'S1上轨('+P.sysS1.entry+')',line:{color:BLUE,width:1}},
     {x:dates,y:dl1,mode:'lines',name:'S1下轨('+P.sysS1.exit+')',line:{color:BLUE,width:1,dash:'dot'}}];
-  if(P.system==='S1S2'){
-    const dh2=donchianHigh(h,P.sysS2.entry), dl2=donchianLow(l,P.sysS2.exit);
-    traces.push({x:dates,y:dh2,mode:'lines',name:'S2上轨('+P.sysS2.entry+')',line:{color:PURPLE,width:1,dash:'dash'}});
-    traces.push({x:dates,y:dl2,mode:'lines',name:'S2下轨('+P.sysS2.exit+')',line:{color:PURPLE,width:1,dash:'dashdot'}});
-  }
   const bx=[],by=[],ax=[],ay=[],sx=[],sy=[];
   res.allEntries.forEach(e=>{ bx.push(dates[e.i]); by.push(e.price); });
   res.allAdds.forEach(a=>{ ax.push(dates[a.i]); ay.push(a.price); });
@@ -295,9 +293,9 @@ function render(res){
   // 交易表
   let th='<table class="t"><thead><tr><th>#</th><th>买入日</th><th>卖出日</th><th>买入价</th><th>卖出价</th><th>股数</th><th>净利润</th><th>收益率</th><th>持仓天数</th><th>类型</th></tr></thead><tbody>';
   res.allTrades.slice().sort((a,b)=>a.exitIdx-b.exitIdx).forEach((t,i)=>{
-    const days=rows[t.exitIdx][0]-rows[t.entryIdx][0];
+    const days=daysBetween(rows[t.entryIdx][0], rows[t.exitIdx][0]);
     const ret=t.pnl/(t.entryPrice*t.shares);
-    th+='<tr><td>'+(i+1)+'</td><td>'+rows[t.entryIdx][0]+'</td><td>'+rows[t.exitIdx][0]+
+    th+='<tr><td>'+(i+1)+'</td><td>'+fmtDate(rows[t.entryIdx][0])+'</td><td>'+fmtDate(rows[t.exitIdx][0])+
       '</td><td>'+t.entryPrice.toFixed(2)+'</td><td>'+t.exitPrice.toFixed(2)+'</td><td>'+t.shares+
       '</td><td class="'+(t.pnl>=0?'pos':'neg')+'">'+(t.pnl>=0?'+':'')+t.pnl.toFixed(0)+
       '</td><td class="'+(ret>=0?'pos':'neg')+'">'+(ret*100).toFixed(2)+'%</td><td>'+days+
@@ -448,9 +446,8 @@ HTML_HEAD = """<!DOCTYPE html>
     </div>
     <div class="row"><label>系统</label>
       <select id="system">
-        <option value="S1">S1（20日突破 / 10日离场）</option>
+        <option value="S1" selected>S1（20日突破 / 10日离场）</option>
         <option value="S2">S2（55日突破 / 20日离场）</option>
-        <option value="S1S2" selected>S1+S2 组合（40% / 60%）</option>
       </select>
     </div>
     <div class="row grid2">

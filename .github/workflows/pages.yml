@@ -1,12 +1,13 @@
 name: Deploy Pages
 
 # 把 AI-quant-lab/ 整个作品集站点部署到 GitHub Pages。
-# 触发：推送到 main 且 AI-quant-lab 任意内容有变动（含 daily_update 提交）、或手动。
+# 触发：推送到 main 且 AI-quant-lab 或本工作流有变动、或手动。
 on:
   push:
     branches: [main]
     paths:
       - "AI-quant-lab/**"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -36,6 +37,13 @@ jobs:
           # 共享 assets/（site.css / nav.js / back.js / vendor）。
           path: AI-quant-lab
 
-      - name: Deploy
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

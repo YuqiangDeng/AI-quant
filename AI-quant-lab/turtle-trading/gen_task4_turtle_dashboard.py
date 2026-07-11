@@ -309,7 +309,7 @@ function render(res){
 function cls(v){ return v>0?'good':(v<0?'bad':'mid'); }
 
 // ---------------- 参数收集 / 事件 ----------------
-// 注意：SYMBOL_DATA 由数据脚本（<script>var SYMBOL_DATA=...</script>）注入为全局，此处不可再声明，否则会遮蔽。
+// 注意：SYMBOL_DATA 由数据脚本以 var 注入为全局，此处不可再声明，否则会遮蔽。
 let P = {};
 function readParams(){
   const g=id=>document.getElementById(id).value;
@@ -360,28 +360,6 @@ function setRange(years){
   const start=startY*10000+101;
   document.getElementById('start').value=start;
   document.getElementById('end').value=last;
-}
-function importCSV(text){
-  const lines=text.split(/\r?\n/).filter(x=>x.trim());
-  if(lines.length<2){ alert('CSV 为空'); return; }
-  const hdr=lines[0].split(','); const idx={};
-  hdr.forEach((hh,i)=>idx[hh.trim()]=i);
-  const dk = idx['trade_date']!==undefined?'trade_date':(idx['date']!==undefined?'date':null);
-  if(dk===null || ['open','high','low','close'].some(k=>idx[k]===undefined)){ alert('需含 trade_date/open/high/low/close 字段'); return; }
-  const f0=lines[1].split(',');
-  const code = (idx['ts_code']!==undefined)? f0[idx['ts_code']] : ('IMPORT'+Object.keys(SYMBOL_DATA).length);
-  const rows=[];
-  for(let i=1;i<lines.length;i++){
-    const f=lines[i].split(',');
-    const t=parseInt(String(f[idx[dk]]).replace(/-/g,''));
-    if(isNaN(t)) continue;
-    rows.push([t, parseFloat(f[idx['open']]), parseFloat(f[idx['high']]), parseFloat(f[idx['low']]), parseFloat(f[idx['close']])]);
-  }
-  rows.sort((a,b)=>a[0]-b[0]);
-  SYMBOL_DATA[code]={label:code+' (导入)', rows:rows};
-  refreshSymbols();
-  document.getElementById('symbol').value=code;
-  alert('已导入 '+code+'，共 '+rows.length+' 行。可直接运行回测。');
 }
 """
 
@@ -496,9 +474,7 @@ HTML_HEAD = """<!DOCTYPE html>
     <label class="chk"><input type="checkbox" id="allowShort"> 允许做空（对称逻辑）</label>
     <label class="chk"><input type="checkbox" id="costOn" checked> 计入交易成本</label>
     <button class="btn" onclick="run()">运行回测</button>
-    <div class="row" style="margin-top:10px;"><label>导入最新CSV（覆盖/新增标的）</label>
-      <input type="file" id="csvFile" accept=".csv"></div>
-    <div class="note">数据更新：本地运行 <code>update_turtle_data.py</code> 追加新交易日；或点上方导入最新CSV，即可用最新完整数据回测。</div>
+    <div class="note">数据来源：已内置 5 只标的（比亚迪 / 美的 / 长江电力 / 中芯A / 中芯H）的前复权日线，由 <code>update_turtle_data.py</code> 每日增量更新。选择标的与时段后点“运行回测”即可。</div>
   </div>
   <div class="main">
     <div id="metrics" class="metrics"></div>
@@ -616,10 +592,6 @@ function toggleAbout(){ var a=document.getElementById('about'); a.style.display 
   let last=0; Object.values(SYMBOL_DATA).forEach(d=>{ if(d.rows.length){ const t=d.rows[d.rows.length-1][0]; if(t>last)last=t; } });
   document.getElementById('dataBadge').textContent = '数据最后交易日：' + (last||'—');
   refreshSymbols();
-  document.getElementById('csvFile').addEventListener('change', function(e){
-    const f=e.target.files[0]; if(!f) return; const r=new FileReader();
-    r.onload=function(){ importCSV(r.result); }; r.readAsText(f, 'utf-8');
-  });
   run();
 })();
 </script>

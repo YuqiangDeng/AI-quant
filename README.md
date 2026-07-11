@@ -23,8 +23,8 @@
 | **Task2** 报告 | `task2/index.html` | 报告页 | Task2 文字报告 |
 | **Task3** 双均线策略看板 | `task3/task3_dashboard.html` | 交互看板 | 双均线/唐奇安择时，多标的、可配参数、回测与可视化（内联 Plotly） |
 | **Task3** 报告 | `task3/report.html` | 报告页 | Task3 文字报告 |
+| **Task3** 双均线指南 | `task3/dual_ma_guide.html` | 文档页 | 双均线策略五标的对比与应用指南（内联 Plotly） |
 | **Task4** 海龟交易法则看板 | `turtle-trading/task4_turtle_dashboard.html` | 交互看板 | N/ATR 头寸管理 + 唐奇安突破，多标的回测 + 每日自动更新 |
-| **Task4** 双均线指南 | `turtle-trading/guide.html` | 文档页 | 双均线策略说明（内联 Plotly） |
 | **行情数据看板** | `market/` | 交互看板 | 比亚迪 / 美的 / 中芯A / 中芯A-H 对比 K 线（ECharts/Plotly） |
 
 ### 站点架构

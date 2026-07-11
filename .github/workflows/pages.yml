@@ -1,0 +1,40 @@
+name: Deploy Pages
+
+# 把 AI-quant-lab/turtle-trading/ 部署到 GitHub Pages。
+# 触发：推送到 main 且该目录有变动（含 daily_update 提交）、或手动。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "AI-quant-lab/turtle-trading/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 该目录内容即站点根：task4_turtle_dashboard.html 在站点根，
+          # vendor/plotly.min.js 以相对路径引用。
+          path: AI-quant-lab/turtle-trading
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

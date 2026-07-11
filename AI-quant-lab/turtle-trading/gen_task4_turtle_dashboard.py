@@ -141,6 +141,7 @@ function simulate(rows, params, sys, weight, total0, allowShort){
   const eq0=total0*weight;
   let st={cash:eq0,pos:0,costBasis:0,openComm:0,units:0,lastEntry:0,avg:0,entryIdx:-1,entryPrice:0};
   const equity=new Array(m).fill(eq0);
+  const unitsSeries=new Array(m).fill(0);
   const trades=[], adds=[], entries=[];
   const rate=params.costOn?params.costRate:0;
   for(let i=0;i<m;i++){
@@ -167,8 +168,9 @@ function simulate(rows, params, sys, weight, total0, allowShort){
         sellAll(st, c[i], i, '离场', trades, rate);
     }
     equity[i] = st.cash + st.pos*c[i];
+    unitsSeries[i] = st.units;
   }
-  return {equity:equity, trades:trades, adds:adds, entries:entries};
+  return {equity:equity, trades:trades, adds:adds, entries:entries, unitsSeries:unitsSeries};
 }
 
 function runBacktest(params){
@@ -183,14 +185,21 @@ function runBacktest(params){
   else { sims=[params.sysS1, params.sysS2]; weights=[0.4,0.6]; }
   const m=rows.length;
   const combined=new Array(m).fill(0);
+  const sysMaxUnits=new Array(m).fill(0);  // 每日各子系统(maxUnits≤4)中的最大持仓单位数
   let allTrades=[], allAdds=[], allEntries=[];
   for(let s=0;s<sims.length;s++){
     const r=simulate(rows, params, sims[s], weights[s], total0, params.allowShort);
-    for(let i=0;i<m;i++) combined[i]+=r.equity[i];
+    for(let i=0;i<m;i++){ combined[i]+=r.equity[i]; if(r.unitsSeries[i]>sysMaxUnits[i]) sysMaxUnits[i]=r.unitsSeries[i]; }
     allTrades=allTrades.concat(r.trades.map(t=>(Object.assign({sys:s}, t))));
     allAdds=allAdds.concat(r.adds);
     allEntries=allEntries.concat(r.entries);
   }
+  // 峰值/平均持有单位按"每子系统"口径（海龟 4 单位上限针对单个子系统，S1+S2 各自封顶）
+  let maxUnitsHeld=0, sumUnits=0, cntUnits=0;
+  for(let i=0;i<m;i++){ if(sysMaxUnits[i]>maxUnitsHeld)maxUnitsHeld=sysMaxUnits[i]; if(sysMaxUnits[i]>0){sumUnits+=sysMaxUnits[i];cntUnits++;} }
+  const avgUnits = cntUnits? sumUnits/cntUnits : 0;
+  let maxLossPct=0;
+  allTrades.forEach(t=>{ const r=t.pnl/(t.entryPrice*t.shares); if(r<maxLossPct)maxLossPct=r; });
   const ret=[];
   for(let i=1;i<m;i++) ret.push(combined[i]/combined[i-1]-1);
   const totalRet=combined[m-1]/combined[0]-1;
@@ -213,7 +222,8 @@ function runBacktest(params){
   const excess=totalRet-bhRet;
   return {rows, combined, bh, allTrades, allAdds, allEntries, total0,
     metrics:{totalRet, ann, sharpe, mdd, winRate, avgWin, avgLoss, profitFactor, expectancy,
-             trades:allTrades.length, excess, rf:params.rf}};
+             trades:allTrades.length, excess, rf:params.rf,
+             maxUnitsHeld, avgUnits, maxLossPct}};
 }
 
 // ---------------- 渲染 ----------------
@@ -276,6 +286,9 @@ function render(res){
     ['期望收益', (M.expectancy/res.total0*100).toFixed(2)+'%', cls(M.expectancy)],
     ['交易次数', String(M.trades), ''],
     ['相对买入持有超额', (M.excess*100).toFixed(2)+'%', cls(M.excess)],
+    ['峰值持有单位(每系统≤4)', String(M.maxUnitsHeld), M.maxUnitsHeld>4?'bad':''],
+    ['平均持有单位', M.avgUnits.toFixed(2), ''],
+    ['单笔最大亏损', (M.maxLossPct*100).toFixed(2)+'%', M.maxLossPct<-0.04?'bad':''],
   ];
   document.getElementById('metrics').innerHTML = cards.map(c=>
     '<div class="card '+c[2]+'"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join('');
@@ -419,6 +432,21 @@ HTML_HEAD = """<!DOCTYPE html>
   .badge.bad{background:#fdeaea;color:#E24B4A;}
   .alert{background:#fff5f5;border:1px solid #f0c0c0;color:#a32d2d;padding:14px;border-radius:10px;}
   .note{font-size:11px;color:var(--mut);line-height:1.5;margin-top:8px;}
+  /* 系统说明 */
+  .btn-about{margin-left:14px;padding:6px 12px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;font-size:12px;cursor:pointer;}
+  .btn-about:hover{background:rgba(255,255,255,.25);}
+  .about{max-width:1100px;margin:0 auto 30px;padding:0 16px;}
+  .about h2{color:var(--blue);font-size:18px;margin:18px 0 12px;}
+  .about h3{color:var(--blue);font-size:15px;margin:18px 0 8px;border-left:4px solid var(--blue);padding-left:8px;}
+  .elems{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
+  .elem{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;}
+  .elem .et{font-weight:600;color:var(--blue);margin-bottom:4px;}
+  .elem .ed{font-size:12px;color:var(--mut);line-height:1.5;}
+  .formula{background:#0C447C;color:#EAF2FB;border-radius:10px;padding:12px 16px;font-size:13px;line-height:1.9;font-family:"SFMono-Regular",Consolas,monospace;}
+  .ed2{font-size:13px;color:var(--txt);line-height:1.7;margin-top:8px;}
+  .risk{background:#fff5f5;border:1px solid #f0c0c0;border-radius:10px;padding:12px 18px;font-size:13px;line-height:1.8;}
+  .risk b{color:#E24B4A;}
+  .flow{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;overflow-x:auto;}
 </style>
 </head>
 <body>
@@ -426,6 +454,7 @@ HTML_HEAD = """<!DOCTYPE html>
   <h1>🐢 海龟交易法则 · 回测演示看板</h1>
   <span class="badge-date" id="dataBadge">数据加载中…</span>
   <span style="margin-left:auto;font-size:12px;opacity:.9;">唐奇安突破 · N=ATR · Unit头寸 · 2N止损 · 0.5N加仓</span>
+  <button class="btn-about" onclick="toggleAbout()">📖 海龟系统说明</button>
 </header>
 <div class="wrap">
   <div class="panel">
@@ -480,10 +509,108 @@ HTML_HEAD = """<!DOCTYPE html>
     <div class="chart" id="tradetable"></div>
   </div>
 </div>
+
+<section id="about" class="about" style="display:none;">
+  <h2>🐢 海龟交易法则 · 完整系统说明</h2>
+
+  <h3>一、五大核心要素</h3>
+  <div class="elems">
+    <div class="elem"><div class="et">① 市场选择</div><div class="ed">只交易流动性充足、波动足够的市场；ATR 衡量波动，太小不值得交易。</div></div>
+    <div class="elem"><div class="et">② 头寸规模</div><div class="ed">Unit = 账户资金×1% ÷ ATR；波动大少买、小多买，风险归一化。</div></div>
+    <div class="elem"><div class="et">③ 入场规则</div><div class="ed">唐奇安突破：价格创 N 日新高即入场（通道默认 20 日）。</div></div>
+    <div class="elem"><div class="et">④ 止损规则</div><div class="ed">持仓均价 − 2×ATR 被跌破，立即全部平仓止损，纪律执行。</div></div>
+    <div class="elem"><div class="et">⑤ 离场规则</div><div class="ed">价格跌破过去 M 日最低价即卖出（M 默认 10 日）。</div></div>
+  </div>
+
+  <h3>二、ATR 计算公式与含义</h3>
+  <div class="formula">
+    TR<sub>t</sub> = max( H<sub>t</sub>−L<sub>t</sub> , |H<sub>t</sub>−C<sub>t−1</sub>| , |L<sub>t</sub>−C<sub>t−1</sub>| )<br>
+    ATR<sub>t</sub> = ( ATR<sub>t−1</sub>×(N−1) + TR<sub>t</sub> ) / N &nbsp;（N 日 Wilder 平滑，首值取前 N 日 TR 均值）
+  </div>
+  <div class="ed2">
+    <b>ATR = 平均真实波幅</b>，代表股票近期每天大致波动多少钱。<b>越大→波动越剧烈→单位股数越少</b>（同样 1% 风险对应更少股数），这正是海龟"用波动定仓位"的精髓。<br>
+    • <b>正常波动</b>：开≈昨收，TR 由当日振幅主导。<br>
+    • <b>跳空高开</b>：开>昨收，|高−昨收| 主导 TR，常现利好。<br>
+    • <b>跳空低开</b>：开<昨收，|低−昨收| 主导 TR，常现利空。<br>
+    <span style="color:var(--mut)">注：TR 通过 |高−昨收|、|低−昨收| 两项自动把跳空计入波动，这是普通振幅(H−L)做不到的。</span>
+  </div>
+
+  <h3>三、头寸规模与加仓（金字塔）</h3>
+  <div class="formula">
+    每单位风险金额 = 账户资金 × 风险比例（默认 1%）<br>
+    一个单位(可买股数) = 每单位风险金额 ÷ ATR<br>
+    加仓：入场后价格每较上一单位 +0.5×ATR 再加 1 单位，最多 4 单位。
+  </div>
+
+  <h3>四、风险控制纪律（必须严格执行）</h3>
+  <ul class="risk">
+    <li>单个股票最多买入 <b>4 个单位</b>（引擎硬性封顶）。</li>
+    <li>高度相关市场（如中芯 A 与中芯 H）合计不超过 <b>6 个单位</b>。</li>
+    <li>同一方向（多/空）所有头寸合计不超过 <b>12 个单位</b>。</li>
+    <li>账户总风险不超过 <b>12%</b>（单位数×2% 止损约束）。</li>
+    <li>触发止损信号必须 <b>立即执行</b>，不得犹豫、不得摊平。</li>
+    <li><b>必须严格执行纪律</b>——系统是机械的，主观干预是亏损根源。</li>
+  </ul>
+
+  <h3>五、海龟交易法则流程图</h3>
+  <div class="flow">
+  <svg viewBox="0 0 680 640" width="100%" style="max-width:720px;display:block;margin:0 auto;">
+    <defs>
+      <marker id="ar" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+      </marker>
+    </defs>
+    <g font-family="-apple-system,'Segoe UI','Microsoft YaHei',sans-serif">
+      <rect x="120" y="58" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">① 加载已存储股价数据</text>
+      <text x="340" y="97" text-anchor="middle" font-size="11" fill="#64748b">OHLCV 日线（前复权）</text>
+      <line x1="340" y1="104" x2="340" y2="114" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="116" width="440" height="60" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="138" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">② 参数面板</text>
+      <text x="340" y="158" text-anchor="middle" font-size="11" fill="#64748b">通道周期 · ATR(N) · M离场 · 账户资金 · 风险比例%</text>
+      <line x1="340" y1="176" x2="340" y2="186" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="188" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="210" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">③ 计算高低价格通道</text>
+      <text x="340" y="227" text-anchor="middle" font-size="11" fill="#64748b">Donchian：上轨 = N日最高 / 下轨 = M日最低</text>
+      <line x1="340" y1="234" x2="340" y2="244" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="246" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="268" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">④ 计算 ATR（N 日）</text>
+      <text x="340" y="285" text-anchor="middle" font-size="11" fill="#64748b">Wilder 平滑真实波幅 = 波动强度</text>
+      <line x1="340" y1="292" x2="340" y2="302" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="304" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="326" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">⑤ 生成交易信号</text>
+      <text x="340" y="343" text-anchor="middle" font-size="11" fill="#64748b">突破 N 日最高 → 买 ｜ 跌破 M 日最低 → 卖</text>
+      <line x1="340" y1="350" x2="340" y2="360" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="362" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="384" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">⑥ 入场：买入 1 单位</text>
+      <text x="340" y="401" text-anchor="middle" font-size="11" fill="#64748b">Unit = 账户资金 × 1% ÷ ATR</text>
+      <line x1="340" y1="408" x2="340" y2="418" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="420" width="440" height="128" rx="10" fill="#F3F8FF" stroke="#185FA5" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="340" y="444" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">⑦ 持仓监控循环</text>
+      <text x="150" y="470" font-size="12" fill="#1f2d3d">• 加仓：价格每 +0.5×ATR 加 1 单位（≤ 4 单位）</text>
+      <text x="150" y="496" font-size="12" fill="#1f2d3d">• 止损：价格 ≤ 均价 − 2×ATR → 立即平仓</text>
+      <text x="150" y="522" font-size="12" fill="#1f2d3d">• 离场：价格 &lt; M 日最低 → 卖出</text>
+      <line x1="340" y1="548" x2="340" y2="558" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#ar)"/>
+
+      <rect x="120" y="560" width="440" height="46" rx="10" fill="#EAF2FB" stroke="#185FA5" stroke-width="1.5"/>
+      <text x="340" y="582" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2d3d">⑧ 模拟交易与回测</text>
+      <text x="340" y="599" text-anchor="middle" font-size="11" fill="#64748b">量化指标汇报 + 可视化（价格/通道/买卖信号）</text>
+    </g>
+  </svg>
+  </div>
+  <div class="ed2" style="color:var(--mut);">注：以上为简化流水线流程图；含决策分支（空仓/持仓、止损/离场/加仓判定）的完整 Mermaid 流程图见规格文件 <code>task4_turtle_trading_spec_v2.md</code>。</div>
+</section>
 """
 
 HTML_TAIL = """
 <script>
+function toggleAbout(){ var a=document.getElementById('about'); a.style.display = (a.style.display==='none'||a.style.display==='')?'block':'none'; }
 // 末交易日徽标（SYMBOL_DATA 已由上方数据脚本以 var 注入，此处不可再用 const 声明，否则浏览器抛 SyntaxError）
 (function(){
   let last=0; Object.values(SYMBOL_DATA).forEach(d=>{ if(d.rows.length){ const t=d.rows[d.rows.length-1][0]; if(t>last)last=t; } });
@@ -496,6 +623,8 @@ HTML_TAIL = """
   run();
 })();
 </script>
+<script>window.__BASE="../";</script>
+<script src="../assets/back.js"></script>
 </body>
 </html>
 """
